@@ -21,12 +21,12 @@ wheels/
 *.egg
 
 # Model checkpoints
-*.pth
+# *.pth
 *.pkl
 *.pickle
 
 # Generated plots
-*.png
+# *.png
 *.jpg
 *.pdf
 
