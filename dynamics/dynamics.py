@@ -1,0 +1,140 @@
+import torch
+import numpy as np
+from abc import ABC, abstractmethod
+
+class StationaryDynamics(ABC):
+    def __init__(self, state_dim, input_dim, control_dim, disturbance_dim, set_mode='avoid'):
+        self.state_dim = state_dim
+        self.input_dim = input_dim
+        self.control_dim = control_dim
+        self.disturbance_dim = disturbance_dim
+        self.set_mode = set_mode
+
+    @abstractmethod
+    def hamiltonian(self, state, dvdx):
+        raise NotImplementedError
+
+    @abstractmethod
+    def boundary_fn(self, state):
+        raise NotImplementedError
+
+    @abstractmethod
+    def plot_config(self):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def state_test_range(self):
+        raise NotImplementedError
+
+    def coord_to_input(self, coord):
+        return coord
+
+    def input_to_coord(self, input):
+        return input
+
+    def io_to_value(self, input, output):
+        return output
+
+    def io_to_dv(self, input, output):
+        return torch.autograd.grad(output, input, grad_outputs=torch.ones_like(output), create_graph=True)[0]
+
+class Dubins3D(StationaryDynamics):
+    def __init__(self, gamma=0.0):
+        super().__init__(state_dim=3, input_dim=3, control_dim=2, disturbance_dim=2, set_mode='avoid')
+        self.gamma = gamma
+        
+        # Problem parameters from Toy_example.md
+        self.L = 1.0 # Assuming L=1.0 as it wasn't specified but implied [-L, L]
+        self.r = 0.3 # Assuming r=0.3
+        self.Cx = 0.0 # Assuming Cx=0.0
+        self.Cy = 0.0 # Assuming Cy=0.0
+        
+        # Control bounds
+        self.uMin = torch.tensor([0.05, -1.0])
+        self.uMax = torch.tensor([1.0, 1.0])
+        
+        # Disturbance bounds
+        self.dMin = torch.tensor([-0.01, -0.01])
+        self.dMax = torch.tensor([0.01, 0.01])
+
+    def hamiltonian(self, state, dvdx):
+        # state: [batch, 3] (x1, x2, x3)
+        # dvdx: [batch, 3] (p1, p2, p3)
+        
+        x3 = state[..., 2]
+        p1 = dvdx[..., 0]
+        p2 = dvdx[..., 1]
+        p3 = dvdx[..., 2]
+        
+        # Optimal Control (minimize Hamiltonian)
+        # term1 = p1*u1*cos(x3) + p2*u1*sin(x3) = u1 * (p1*cos(x3) + p2*sin(x3))
+        # if coeff > 0, choose uMin1, else uMax1
+        det1 = p1 * torch.cos(x3) + p2 * torch.sin(x3)
+        u1 = torch.where(det1 > 0, self.uMin[0], self.uMax[0])
+        
+        # term2 = p3*u2
+        # if p3 > 0, choose uMin2, else uMax2
+        u2 = torch.where(p3 > 0, self.uMin[1], self.uMax[1])
+        
+        # Optimal Disturbance (maximize Hamiltonian)
+        # term3 = p1*d1
+        # if p1 > 0, choose dMax1, else dMin1
+        d1 = torch.where(p1 > 0, self.dMax[0], self.dMin[0])
+        
+        # term4 = p2*d2
+        # if p2 > 0, choose dMax2, else dMin2
+        d2 = torch.where(p2 > 0, self.dMax[1], self.dMin[1])
+        
+        # Hamiltonian
+        # H = p1(u1*cos(x3)+d1) + p2(u1*sin(x3)+d2) + p3*u2 - gamma*V
+        # Note: V is not passed here, but usually handled in loss. 
+        # However, the note says H_theta(x) = min max [grad V . f - gamma V]
+        # The standard DeepReach hamiltonian function returns min max [grad V . f]
+        # and the loss function subtracts gamma * V.
+        # Let's check how losses.py uses it.
+        # In standard DeepReach, hamiltonian returns H without the time derivative part.
+        # Here we have -gamma * V. 
+        # I will return the dot product part here: \nabla V \cdot f
+        # And let the loss function handle -gamma * V.
+        
+        ham = p1 * (u1 * torch.cos(x3) + d1) + \
+              p2 * (u1 * torch.sin(x3) + d2) + \
+              p3 * u2
+              
+        return ham
+
+    def boundary_fn(self, state):
+        # g(x) = max(|x1|-L, |x2|-L, r^2 - (x1-Cx)^2 - (x2-Cy)^2)
+        x1 = state[..., 0]
+        x2 = state[..., 1]
+        
+        # Box constraints
+        g1 = torch.abs(x1) - self.L
+        g2 = torch.abs(x2) - self.L
+        
+        # Obstacle constraint (inside circle is unsafe)
+        # Note: The note says "Inside circular obstacle... is unsafe".
+        # g(x) <= 0 is safe.
+        # So if inside circle, g(x) > 0.
+        # The note defines g(x) = max(..., r^2 - dist^2).
+        # If dist < r (inside), r^2 - dist^2 > 0. Correct.
+        dist_sq = (x1 - self.Cx)**2 + (x2 - self.Cy)**2
+        g3 = self.r**2 - dist_sq
+        
+        return torch.maximum(torch.maximum(g1, g2), g3)
+
+    def plot_config(self):
+        return {
+            'state_slices': [0.0, 0.0, 0.0], # Default slice
+            'x_axis_idx': 0,
+            'y_axis_idx': 1,
+            'z_axis_idx': 2,
+            'state_labels': ['x', 'y', 'theta']
+        }
+
+    def state_test_range(self):
+        return [
+            [-self.L, self.L],
+            [-self.L, self.L],
+            [-np.pi, np.pi]
+        ]
