@@ -30,8 +30,8 @@ def init_stationary_discounted_loss(dynamics):
         # value is [batch, 1], g_x is [batch]
         residual = torch.maximum(g_x - value.squeeze(-1), ham)
         
-        # Loss is mean absolute residual
-        loss = torch.abs(residual).mean()
+        # Loss is sum absolute residual
+        loss = torch.abs(residual).sum()
         
         return {'loss': loss, 'residual': residual}
 
