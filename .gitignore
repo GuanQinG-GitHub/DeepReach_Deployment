@@ -30,6 +30,12 @@ wheels/
 *.jpg
 *.pdf
 
+# Training logs
+runs/
+
+# WandB
+wandb/
+
 # IDE
 .vscode/
 .idea/

@@ -46,6 +46,12 @@ class BatchLinear(nn.Linear):
 
 
 class Sine(nn.Module):
+    """
+    Sine activation function (SIREN).
+    Used because we need accurate derivatives of the output w.r.t input.
+    Standard ReLUs have discontinuous derivatives (0 or 1), which is bad for PDEs.
+    Sine is smooth and infinitely differentiable.
+    """
     def __init(self):
         super().__init__()
 
@@ -115,6 +121,10 @@ class FCBlock(nn.Module):
 
 class SingleBVPNet(nn.Module):
     '''A canonical representation network for a BVP.'''
+    """
+    A Multi-Layer Perceptron (MLP) designed for solving Boundary Value Problems (BVPs).
+    It maps state x -> Value V(x).
+    """
 
     def __init__(self, out_features=1, type='sine', in_features=2,
                  mode='mlp', hidden_features=256, num_hidden_layers=3, **kwargs):
@@ -129,6 +139,7 @@ class SingleBVPNet(nn.Module):
             params = OrderedDict(self.named_parameters())
 
         # Enables us to compute gradients w.r.t. coordinates
+        # We need to clone and set requires_grad=True to ensure we can compute dvdx later.
         # TODO: should not need to .clone().detach().requires_grad_(True); instead, use .retain_grad() on input in calling script
         # otherwise, .detach() removes input from the graph so grad cannot propagate back end-to-end, e.g., percept -> NN -> state estimation (input)
         coords_org = model_input['coords'].clone().detach().requires_grad_(True)

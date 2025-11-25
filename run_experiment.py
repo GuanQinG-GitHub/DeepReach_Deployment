@@ -11,6 +11,12 @@ from dynamics import dynamics
 from experiments import experiments
 from utils import modules, dataio, losses
 
+# This script is the main entry point for training.
+# It handles:
+# 1. Argument parsing (hyperparameters)
+# 2. Initialization of all components (Dynamics, Dataset, Model, Loss, Experiment)
+# 3. Execution of the training loop
+
 def main():
     p = configargparse.ArgumentParser()
     p.add_argument('-c', '--config_filepath', required=False, is_config_file=True, help='Path to config file.')
@@ -43,10 +49,13 @@ def main():
     p.add_argument('--lr', type=float, default=2e-5, help='Learning rate.')
     p.add_argument('--steps_til_summary', type=int, default=100, help='Steps until summary.')
     p.add_argument('--epochs_til_ckpt', type=int, default=1000, help='Epochs until checkpoint.')
+    p.add_argument('--pretrain_boundary', action='store_true', default=False, help='Pretrain network to match boundary function g(x).')
+    p.add_argument('--pretrain_iters', type=int, default=2000, help='Number of pretraining iterations.')
     
     # Experiment Class
     p.add_argument('--experiment_class', type=str, default='StationaryExperiment', help='Experiment class to use.')
 
+    # Parse arguments. configargparse allows providing arguments via config file or command line.
     opt = p.parse_args()
 
     # Set seeds
@@ -68,30 +77,39 @@ def main():
         os.makedirs(experiment_dir)
 
     # Initialize Dynamics
+    # The dynamics class defines the physics of the system (f(x,u,d)) and the Hamiltonian.
     dynamics_class = getattr(dynamics, opt.dynamics_class)
     # Pass gamma if it's in the constructor
     # We assume Dubins3D takes gamma
     dyn = dynamics_class(gamma=opt.gamma)
 
     # Initialize Dataset
+    # The dataset samples random points in the state space.
+    # Unlike standard supervised learning, we don't have fixed labels.
+    # The "label" is the physics constraint enforced by the loss function.
     dataset = dataio.StationaryReachabilityDataset(dynamics=dyn, numpoints=opt.numpoints)
 
     # Initialize Model
+    # We use a SingleBVPNet (Multi-Layer Perceptron) to approximate the value function V(x).
+    # It uses Sine activations (SIREN) to allow for accurate derivative computation.
     model = modules.SingleBVPNet(in_features=dyn.state_dim, out_features=1, type=opt.model_type, 
                                  hidden_features=opt.num_nl, num_hidden_layers=opt.num_hl)
     model.to(opt.device)
 
     # Initialize Loss
+    # The loss function enforces the Hamilton-Jacobi PDE.
+    # loss = |max(g(x) - V(x), Hamiltonian - gamma*V(x))|
     loss_fn = losses.init_stationary_discounted_loss(dyn)
 
     # Initialize Experiment
+    # The experiment class manages the training loop, logging, and validation.
     experiment_class = getattr(experiments, opt.experiment_class)
     experiment = experiment_class(model=model, dataset=dataset, experiment_dir=experiment_dir, use_wandb=opt.use_wandb)
 
     # Train
     experiment.train(device=opt.device, batch_size=opt.batch_size, epochs=opt.num_epochs, lr=opt.lr,
                      steps_til_summary=opt.steps_til_summary, epochs_til_checkpoint=opt.epochs_til_ckpt,
-                     loss_fn=loss_fn)
+                     loss_fn=loss_fn, pretrain_boundary=opt.pretrain_boundary, pretrain_iters=opt.pretrain_iters)
 
 if __name__ == '__main__':
     main()

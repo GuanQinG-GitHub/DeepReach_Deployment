@@ -10,6 +10,9 @@ from tqdm.autonotebook import tqdm
 from utils import losses
 
 class StationaryExperiment:
+    """
+    Manages the training process for stationary reachability problems.
+    """
     def __init__(self, model, dataset, experiment_dir, use_wandb):
         self.model = model
         self.dataset = dataset
@@ -20,6 +23,10 @@ class StationaryExperiment:
         pass
 
     def validate(self, device, epoch, save_path, resolution=200):
+        """
+        Validates the model by plotting the 0-level set of the value function.
+        The 0-level set represents the boundary of the safe region (viability kernel).
+        """
         was_training = self.model.training
         self.model.eval()
         self.model.requires_grad_(False)
@@ -33,52 +40,136 @@ class StationaryExperiment:
         
         x_min, x_max = state_range[x_idx]
         y_min, y_max = state_range[y_idx]
-        z_val = plot_config['state_slices'][z_idx] # Fixed Z value for 2D slice
+        
+        # Define z-values (thetas) to plot
+        # Plot 5 slices from min to max of the z-dimension
+        z_min, z_max = state_range[z_idx]
+        z_values = torch.linspace(z_min, z_max, 5)
 
         xs = torch.linspace(x_min, x_max, resolution)
         ys = torch.linspace(y_min, y_max, resolution)
         xys = torch.cartesian_prod(xs, ys)
         
-        coords = torch.zeros(resolution*resolution, self.dataset.dynamics.state_dim)
-        coords[:, x_idx] = xys[:, 0]
-        coords[:, y_idx] = xys[:, 1]
-        coords[:, z_idx] = z_val # Fix Z
+        # --- 2D Plots (Level Sets) ---
+        fig_2d = plt.figure(figsize=(5*len(z_values), 5))
         
-        # If there are other dimensions, they should be fixed too. 
-        # For Dubins3D, we have 3 dims, so this is sufficient.
-        
-        with torch.no_grad():
-            model_results = self.model({'coords': coords.to(device)})
-            values = model_results['model_out'].squeeze(dim=-1).detach().cpu()
+        for i, z_val in enumerate(z_values):
+            coords = torch.zeros(resolution*resolution, self.dataset.dynamics.state_dim)
+            coords[:, x_idx] = xys[:, 0]
+            coords[:, y_idx] = xys[:, 1]
+            coords[:, z_idx] = z_val 
             
-        fig = plt.figure(figsize=(10, 10))
-        ax = fig.add_subplot(1, 1, 1)
-        ax.set_title(f'Epoch {epoch}, {plot_config["state_labels"][z_idx]} = {z_val}')
+            with torch.no_grad():
+                model_results = self.model({'coords': coords.to(device)})
+                values = model_results['model_out'].squeeze(dim=-1).detach().cpu()
+            
+            values_grid = values.reshape(resolution, resolution).T
+            
+            ax = fig_2d.add_subplot(1, len(z_values), i+1)
+            ax.set_title(f'Epoch {epoch}, {plot_config["state_labels"][z_idx]} = {z_val:.2f}')
+            
+            # Plot 0-level set
+            # Red (1) = Unsafe (V > 0, inside obstacle)
+            # Blue (0) = Safe (V <= 0, outside obstacle)
+            s = ax.imshow(1*(values_grid > 0), cmap='bwr', origin='lower', extent=(x_min, x_max, y_min, y_max))
+            fig_2d.colorbar(s)
         
-        # Reshape for imshow (x corresponds to columns, y to rows)
-        # imshow origin='lower' expects [rows, cols] -> [y, x]
-        # values are from cartesian_prod(xs, ys), so first dim is x, second is y.
-        # We need to reshape to [len(xs), len(ys)] and then transpose to [len(ys), len(xs)]
-        values_grid = values.reshape(resolution, resolution).T
+        fig_2d.savefig(save_path)
         
-        # Plot 0-level set
-        s = ax.imshow(1*(values_grid <= 0), cmap='bwr', origin='lower', extent=(x_min, x_max, y_min, y_max))
-        fig.colorbar(s)
+        # --- 3D Plots (Surface) ---
+        fig_3d = plt.figure(figsize=(5*len(z_values), 5))
         
-        fig.savefig(save_path)
+        # Create meshgrid for 3D plotting
+        X, Y = torch.meshgrid(xs, ys, indexing='xy')
         
+        for i, z_val in enumerate(z_values):
+            coords = torch.zeros(resolution*resolution, self.dataset.dynamics.state_dim)
+            coords[:, x_idx] = xys[:, 0]
+            coords[:, y_idx] = xys[:, 1]
+            coords[:, z_idx] = z_val 
+            
+            with torch.no_grad():
+                model_results = self.model({'coords': coords.to(device)})
+                values = model_results['model_out'].squeeze(dim=-1).detach().cpu()
+            
+            # Reshape for surface plot
+            Z = values.reshape(resolution, resolution).T
+            
+            ax = fig_3d.add_subplot(1, len(z_values), i+1, projection='3d')
+            ax.set_title(f'Epoch {epoch}, {plot_config["state_labels"][z_idx]} = {z_val:.2f}')
+            
+            surf = ax.plot_surface(X.numpy(), Y.numpy(), Z.numpy(), cmap='viridis', edgecolor='none')
+            fig_3d.colorbar(surf)
+            ax.set_xlabel(plot_config["state_labels"][x_idx])
+            ax.set_ylabel(plot_config["state_labels"][y_idx])
+            ax.set_zlabel('V(x)')
+            
+        save_path_3d = save_path.replace('.png', '_3d.png')
+        fig_3d.savefig(save_path_3d)
+
         if self.use_wandb:
             wandb.log({
                 'step': epoch,
-                'val_plot': wandb.Image(fig),
+                'val_plot_2d': wandb.Image(fig_2d),
+                'val_plot_3d': wandb.Image(fig_3d),
             })
-        plt.close(fig)
+        plt.close(fig_2d)
+        plt.close(fig_3d)
 
         if was_training:
             self.model.train()
             self.model.requires_grad_(True)
 
-    def train(self, device, batch_size, epochs, lr, steps_til_summary, epochs_til_checkpoint, loss_fn):
+    def pretrain_to_boundary(self, device, iters=2000, lr=1e-3, numpoints=10000):
+        """
+        Pretrain the network to match the boundary function g(x).
+        This provides a good initialization for the value function.
+        """
+        print("Pretraining network to boundary function g(x)...")
+        self.model.train()
+        self.model.requires_grad_(True)
+        
+        optim = torch.optim.Adam(lr=lr, params=self.model.parameters())
+        
+        state_range = self.dataset.dynamics.state_test_range()
+        low = torch.tensor([r[0] for r in state_range])
+        high = torch.tensor([r[1] for r in state_range])
+        
+        for i in range(iters):
+            # Sample random points
+            state = torch.rand(numpoints, self.dataset.dynamics.state_dim) * (high - low) + low
+            state = state.to(device)
+            
+            # Get boundary function values
+            g_x = self.dataset.dynamics.boundary_fn(state)
+            
+            # Forward pass
+            model_results = self.model({'coords': state})
+            value = model_results['model_out'].squeeze(-1)
+            
+            # MSE loss between V(x) and g(x)
+            loss = torch.mean((value - g_x)**2)
+            
+            # Backprop
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
+            
+            if i % 100 == 0:
+                print(f"Pretrain iter {i}/{iters}, Loss: {loss.item():.6f}")
+        
+        print("Pretraining complete!")
+
+    def train(self, device, batch_size, epochs, lr, steps_til_summary, epochs_til_checkpoint, loss_fn, 
+              pretrain_boundary=False, pretrain_iters=2000):
+        """
+        Main training loop.
+        Iterates through epochs, samples data, computes loss, and updates model weights.
+        """
+        # Pretrain to boundary function if requested
+        if pretrain_boundary:
+            self.pretrain_to_boundary(device, iters=pretrain_iters)
+        
         self.model.train()
         self.model.requires_grad_(True)
         
@@ -102,6 +193,7 @@ class StationaryExperiment:
                     model_input = {key: value.to(device) for key, value in model_input.items()}
                     
                     # Forward pass
+                    # The model outputs the value function V(x)
                     model_results = self.model(model_input)
                     
                     # Compute gradients
@@ -110,9 +202,12 @@ class StationaryExperiment:
                     value = model_results['model_out']
                     
                     # Compute dvdx
+                    # We need the gradient of V w.r.t state x to compute the Hamiltonian.
+                    # This is done using torch.autograd.grad.
                     dvdx = self.dataset.dynamics.io_to_dv(state, value.squeeze(-1))
                     
                     # Compute loss
+                    # The loss function enforces the PDE constraint.
                     loss_dict = loss_fn(state, value, dvdx)
                     loss = loss_dict['loss']
                     

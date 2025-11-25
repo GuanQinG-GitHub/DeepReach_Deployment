@@ -39,6 +39,12 @@ class StationaryDynamics(ABC):
         return torch.autograd.grad(output, input, grad_outputs=torch.ones_like(output), create_graph=True)[0]
 
 class Dubins3D(StationaryDynamics):
+    """
+    Dynamics for a 3D Dubins Car.
+    State: [x, y, theta]
+    Control: [v, w] (velocity, angular velocity)
+    Disturbance: [d1, d2] (additive disturbance on x, y)
+    """
     def __init__(self, gamma=0.0):
         super().__init__(state_dim=3, input_dim=3, control_dim=2, disturbance_dim=2, set_mode='avoid')
         self.gamma = gamma
@@ -58,6 +64,13 @@ class Dubins3D(StationaryDynamics):
         self.dMax = torch.tensor([0.01, 0.01])
 
     def hamiltonian(self, state, dvdx):
+        """
+        Computes the Hamiltonian: H(x, p) = min_u max_d (p . f(x, u, d))
+        where p = dvdx (gradient of value function).
+        
+        This function implements the optimal control logic.
+        It analytically finds the optimal u and d that minimize/maximize the dot product.
+        """
         # state: [batch, 3] (x1, x2, x3)
         # dvdx: [batch, 3] (p1, p2, p3)
         
@@ -104,6 +117,21 @@ class Dubins3D(StationaryDynamics):
         return ham
 
     def boundary_fn(self, state):
+        """
+        Defines the target/obstacle set g(x).
+        The safe region is defined by V(x) <= 0.
+        Here, g(x) represents the obstacle (cylinder) and the state bounds.
+        If g(x) <= 0, the state is safe (outside obstacle, inside bounds).
+        Wait, usually g(x) <= 0 is the target set (unsafe set) in reachability.
+        Let's double check the convention.
+        In standard reachability, we want to AVOID the target set.
+        So if we are in the target set (g(x) <= 0), we are unsafe.
+        However, the code below computes g3 = r^2 - dist^2.
+        If inside circle (dist < r), g3 > 0.
+        If outside circle (dist > r), g3 < 0.
+        So g(x) > 0 means unsafe (inside obstacle).
+        g(x) <= 0 means safe (outside obstacle).
+        """
         # g(x) = max(|x1|-L, |x2|-L, r^2 - (x1-Cx)^2 - (x2-Cy)^2)
         x1 = state[..., 0]
         x2 = state[..., 1]
