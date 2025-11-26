@@ -7,7 +7,7 @@ def init_brt_hjivi_loss(dynamics, minWith, dirichlet_loss_divisor):
             # pretraining loss
             diff_constraint_hom = torch.Tensor([0])
         else:
-            ham = dynamics.hamiltonian(state, dvds)
+            ham = dynamics.hamiltonian(state, dvds, value.squeeze(-1))
             if minWith == 'zero':
                 ham = torch.clamp(ham, max=0.0)
 
@@ -33,7 +33,7 @@ def init_brat_hjivi_loss(dynamics, minWith, dirichlet_loss_divisor):
             # pretraining loss
             diff_constraint_hom = torch.Tensor([0])
         else:
-            ham = dynamics.hamiltonian(state, dvds)
+            ham = dynamics.hamiltonian(state, dvds, value.squeeze(-1))
             if minWith == 'zero':
                 ham = torch.clamp(ham, max=0.0)
 
