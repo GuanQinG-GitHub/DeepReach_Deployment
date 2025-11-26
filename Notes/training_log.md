@@ -27,3 +27,7 @@
     - remove the pretrain part, since it's not helpful at this stage
     - switch to the sum of the residual
     - increase the iterations and later tuning the learning rate
+
+- Next
+    - Examine the loss, why each point has such a small loss?
+    - Try to add the time dependency, following Somil's work

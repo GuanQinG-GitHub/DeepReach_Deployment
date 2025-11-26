@@ -1,0 +1,258 @@
+\section*{From DeepReach to Infinite Horizon with Time-Dependent Training}
+\label{sec:deepreach_IH}
+
+This document explains how to extend DeepReach’s time-dependent framework to approximate the infinite-horizon discounted viability kernel for the 3D Dubins car. We retain an explicit time-dependence during training to stabilize learning, while still obtaining an approximation of the infinite-horizon discounted viability value function at $t=0$.
+
+The presentation includes:  
+1) the formulation of the time-dependent discounted HJ-VI;  
+2) the DeepReach-style training method;  
+3) full implementation details for the Dubins car toy example.
+
+\subsection*{1. Problem Setup: 3D Dubins Car}
+
+We consider the Dubins car with disturbance:
+\begin{equation}
+\dot{x}_{1}=u_{1}\cos(x_{3})+d_{1},\qquad
+\dot{x}_{2}=u_{1}\sin(x_{3})+d_{2},\qquad
+\dot{x}_{3}=u_{2}.
+\end{equation}
+
+Control bounds:
+\[
+u_1\in[0.05,1],\qquad u_2\in[-1,1].
+\]
+
+Disturbance bounds:
+\[
+d_1,d_2\in[-0.01,0.01].
+\]
+
+\subsubsection*{1.1 State Constraints}
+
+The safety constraints are described by the implicit function
+\begin{equation}
+g(x)=\max\{\;|x_1|-L,\; |x_2|-L,\; r^{2}-(x_1-C_x)^2-(x_2-C_y)^2\;\}.
+\end{equation}
+
+The safe region is $\{x\mid g(x)\le 0\}$. We work in the computational domain
+\[
+B=[-L-\delta,L+\delta]\times[-L-\delta,L+\delta]\times[-\pi,\pi],
+\]
+which matches the domain used in the dynamic-programming (DP) baseline.
+
+\subsection*{2. Infinite-Horizon Discounted Viability With Time Dependence}
+
+We keep the discounted infinite-horizon structure, but introduce an explicit time variable so that the neural network solves a \emph{finite-horizon discounted} HJ-VI over $t\in[0,T]$ with sufficiently large $T$, and interpret $V(x,0)$ as the infinite-horizon approximation.
+
+\subsubsection*{2.1 Discounted Value Function}
+
+Define the discounted performance index
+\begin{equation}
+J(x,t;u,d)=\sup_{s\in[t,T]}e^{-\gamma(s-t)}g(x(s)),
+\end{equation}
+with discount factor $\gamma>0$. The value function is
+\begin{equation}
+V(x,t)=\sup_{\delta}\inf_{u(\cdot)} J(x,t;u,\delta[u]).
+\end{equation}
+
+For large $T$, $V(x,0)$ approximates the infinite-horizon discounted viability value function.
+
+\subsubsection*{2.2 Time-Dependent Discounted HJ-VI}
+
+Dynamic programming yields a time-dependent HJ variational inequality:
+\begin{equation}
+\min\left\{
+V_t(x,t)+H(x,t,\nabla_x V,V),\quad g(x)-V(x,t)
+\right\}=0,
+\qquad t\in[0,T],
+\end{equation}
+with terminal condition
+\begin{equation}
+V(x,T)=g(x).
+\end{equation}
+
+For the Dubins car, the Hamiltonian is
+\begin{equation}
+H=\min_{u\in U}\max_{d\in D}
+\Big[
+p_1(u_1\cos x_3 + d_1)
++p_2(u_1\sin x_3 + d_2)
++p_3u_2
+-\gamma V
+\Big],
+\end{equation}
+where $p=(p_1,p_2,p_3)=\nabla_x V$.
+
+This is the continuous-time formulation consistent with the DP solver (based on {\tt HJIPDE\_solve}) where discount is encoded as $-\gamma V$.
+
+\subsection*{3. DeepReach $\rightarrow$ Infinite Horizon (with Time)}
+
+DeepReach trains a neural network $V_\theta(x,t)$ to represent the solution of a finite-horizon HJ-VI using:
+\begin{itemize}
+\item a terminal loss at $t=T$,
+\item an HJ-VI residual for $t<T$,
+\item a backward-in-time curriculum.
+\end{itemize}
+
+We reintroduce time-dependence (unlike the stationary approach) because it stabilizes training and propagates solution information backward from the terminal slice.
+
+We keep discounting inside the Hamiltonian, so the $t=0$ slice approximates an infinite-horizon viability solution.
+
+\subsection*{4. Neural Representation}
+
+We use a SIREN architecture
+\[
+V_\theta:\mathbb R^3\times[0,T]\rightarrow\mathbb R,
+\]
+with sinusoidal activations to ensure accurate spatial gradients.
+
+Autograd yields
+\[
+V_t = \frac{\partial V_\theta}{\partial t},
+\qquad
+\nabla_x V = \left(
+\frac{\partial V_\theta}{\partial x_1},
+\frac{\partial V_\theta}{\partial x_2},
+\frac{\partial V_\theta}{\partial x_3}
+\right).
+\]
+
+\subsection*{5. Loss Function: Time-Dependent Discounted HJ-VI}
+
+\subsubsection*{5.1 HJ-VI Residual}
+
+For a sample $(x,t)$,
+\begin{equation}
+\mathcal R(x,t;\theta)
+=
+\min\{\,V_t(x,t)+H_\theta(x,t),\quad g(x)-V_\theta(x,t)\,\}.
+\end{equation}
+
+The Hamiltonian uses closed-form minimizing/maximizing controls:
+\[
+\alpha(x,p)=p_1\cos x_3+p_2\sin x_3.
+\]
+\[
+u_1^\star=\begin{cases}
+u_{\min,1}, &\alpha(x,p)>0,\\
+u_{\max,1}, &\text{otherwise},
+\end{cases}
+\quad
+u_2^\star=\begin{cases}
+u_{\min,2}, &p_3>0,\\
+u_{\max,2}, &\text{otherwise},
+\end{cases}
+\]
+\[
+d_1^\star=\begin{cases}
+d_{\max,1}, & p_1>0,\\
+d_{\min,1}, & \text{otherwise},
+\end{cases}
+\qquad
+d_2^\star=\begin{cases}
+d_{\max,2}, & p_2>0,\\
+d_{\min,2}, & \text{otherwise}.
+\end{cases}
+\]
+
+The Hamiltonian is
+\begin{align}
+H_\theta(x,t)
+&=
+p_1(u_1^\star\cos x_3 + d_1^\star)
++p_2(u_1^\star\sin x_3 + d_2^\star)
++p_3u_2^\star
+-\gamma V_\theta(x,t).
+\end{align}
+
+This matches the MATLAB function {\tt Dubin\_car\_3D\_ham}.
+
+\subsubsection*{5.2 Terminal Loss}
+
+At $t=T$:
+\begin{equation}
+\mathcal L_{\text{term}}
+=
+\mathbb E_{x}
+\bigl|V_\theta(x,T)-g(x)\bigr|.
+\end{equation}
+
+\subsubsection*{5.3 PDE Residual Loss}
+
+\begin{equation}
+\mathcal L_{\text{HJVI}}
+=
+\mathbb E_{(x,t)}
+\bigl|\mathcal R(x,t;\theta)\bigr|.
+\end{equation}
+
+Total loss:
+\begin{equation}
+\boxed{
+\mathcal L(\theta)
+=
+\lambda_{\text{term}}\mathcal L_{\text{term}}
++\lambda_{\text{HJ}}\mathcal L_{\text{HJVI}}.
+}
+\end{equation}
+
+\subsection*{6. Backward-in-Time Curriculum}
+
+Following DeepReach:
+\begin{enumerate}
+\item \textbf{Phase 1:} Train only the terminal slice $t=T$ until $V_\theta(x,T)\approx g(x)$.
+\item \textbf{Phase 2:} Train on $t\in[T-\Delta t,T]$.
+\item \textbf{Phase 3:} Expand: $t\in[T-2\Delta t,T]$, etc.
+\item \textbf{Phase 4:} Uniformly sample $t\in[0,T]$ for refinement.
+\end{enumerate}
+
+This increases training stability, unlike the stationary PDE training which lacks temporal causality.
+
+\subsection*{7. Implementation for Dubins Car}
+
+\subsubsection*{7.1 Parameters}
+
+Use the same as dynamic-programming baseline:
+\[
+T=10,\quad \gamma=0.7,\quad L=0.9,\quad r=0.2,
+\]
+and the training domain
+\[
+x_1,x_2\in[-L-\delta,L+\delta],\qquad x_3\in[-\pi,\pi],\qquad t\in[0,T].
+\]
+
+\subsubsection*{7.2 Sampling}
+
+\begin{itemize}
+\item Uniform sampling over $B$.
+\item Boundary-enhanced sampling near $g(x)=0$.
+\item Time sampling based on curriculum schedule.
+\end{itemize}
+
+\subsubsection*{7.3 Approximating Infinite-Horizon Solution}
+
+After training, the slice
+\[
+V_\theta(x,0)
+\]
+approximates the infinite-horizon discounted viability value function. The viability kernel estimate is:
+\[
+\mathcal V_\infty \approx \{x: V_\theta(x,0)\le 0\}.
+\]
+
+You can directly compare $V_\theta(x,0)$ with the DP solution $V(x)$ obtained via repeated calls to {\tt HJIPDE\_solve} and the update
+\[
+V_{\text{new}}=\max(V_{\text{DPstep}},\ g).
+\]
+
+\subsection*{8. Summary}
+
+\begin{itemize}
+\item The stationary discounted HJ-VI is theoretically correct but training can be unstable.
+\item Adding \emph{time dependence} restores the causal structure and improves training robustness.
+\item DeepReach’s backward-in-time curriculum provides stable propagation of the terminal condition.
+\item With discount included in the Hamiltonian, $V_\theta(x,0)$ becomes an accurate approximation of the infinite-horizon viability kernel.
+\item The Dubins car implementation follows exactly the same Hamiltonian structure as the helperOC DP baseline.
+\end{itemize}
+
+This method combines the stability of DeepReach with the correctness of discounted infinite-horizon viability theory, giving a practical and implementable algorithm for high-dimensional viability learning.

@@ -2,7 +2,11 @@ import torch
 import numpy as np
 from abc import ABC, abstractmethod
 
+# StationaryDynamics is an abstract base class (inherits from abc.ABC)
 class StationaryDynamics(ABC):
+# This class inherits from `ABC`, making it an Abstract Base Class.
+# Methods marked with `@abstractmethod` must be overridden by any concrete subclass.
+# Instantiating a subclass without implementing all abstract methods raises a TypeError.
     def __init__(self, state_dim, input_dim, control_dim, disturbance_dim, set_mode='avoid'):
         self.state_dim = state_dim
         self.input_dim = input_dim
@@ -50,7 +54,7 @@ class Dubins3D(StationaryDynamics):
         self.gamma = gamma
         
         # Problem parameters from Toy_example.md
-        self.L = 1.0 # Assuming L=1.0 as it wasn't specified but implied [-L, L]
+        self.L = 0.9 # Assuming L=1.0
         self.r = 0.3 # Assuming r=0.3
         self.Cx = 0.0 # Assuming Cx=0.0
         self.Cy = 0.0 # Assuming Cy=0.0
@@ -65,29 +69,30 @@ class Dubins3D(StationaryDynamics):
 
     def hamiltonian(self, state, dvdx):
         """
-        Computes the Hamiltonian: H(x, p) = min_u max_d (p . f(x, u, d))
+        Computes the Hamiltonian: H(x, p) = min_u max_d (p \cdot f(x, u, d))
         where p = dvdx (gradient of value function).
         
         This function implements the optimal control logic.
         It analytically finds the optimal u and d that minimize/maximize the dot product.
         """
+        # input arguments state and dvdx should be torch tensors
         # state: [batch, 3] (x1, x2, x3)
         # dvdx: [batch, 3] (p1, p2, p3)
         
-        x3 = state[..., 2]
-        p1 = dvdx[..., 0]
-        p2 = dvdx[..., 1]
-        p3 = dvdx[..., 2]
+        x3 = state[..., 2]   # take the 3rd component (index 2) of the state vector for every sample
+        p1 = dvdx[..., 0]    # take the 1st gradient component for every sample
+        p2 = dvdx[..., 1]    # take the 2nd gradient component for every sample
+        p3 = dvdx[..., 2]    # take the 3rd gradient component for every sample
         
         # Optimal Control (minimize Hamiltonian)
         # term1 = p1*u1*cos(x3) + p2*u1*sin(x3) = u1 * (p1*cos(x3) + p2*sin(x3))
         # if coeff > 0, choose uMin1, else uMax1
         det1 = p1 * torch.cos(x3) + p2 * torch.sin(x3)
-        u1 = torch.where(det1 > 0, self.uMin[0], self.uMax[0])
+        u1 = torch.where(det1 > 0, self.uMin[0], self.uMax[0]) # vectorized conditional
         
         # term2 = p3*u2
         # if p3 > 0, choose uMin2, else uMax2
-        u2 = torch.where(p3 > 0, self.uMin[1], self.uMax[1])
+        u2 = torch.where(p3 > 0, self.uMin[1], self.uMax[1]) # vectorized conditional
         
         # Optimal Disturbance (maximize Hamiltonian)
         # term3 = p1*d1
@@ -99,16 +104,8 @@ class Dubins3D(StationaryDynamics):
         d2 = torch.where(p2 > 0, self.dMax[1], self.dMin[1])
         
         # Hamiltonian
-        # H = p1(u1*cos(x3)+d1) + p2(u1*sin(x3)+d2) + p3*u2 - gamma*V
-        # Note: V is not passed here, but usually handled in loss. 
-        # However, the note says H_theta(x) = min max [grad V . f - gamma V]
-        # The standard DeepReach hamiltonian function returns min max [grad V . f]
-        # and the loss function subtracts gamma * V.
-        # Let's check how losses.py uses it.
-        # In standard DeepReach, hamiltonian returns H without the time derivative part.
-        # Here we have -gamma * V. 
-        # I will return the dot product part here: \nabla V \cdot f
-        # And let the loss function handle -gamma * V.
+        # H = p1(u1_opt*cos(x3)+d1_opt) + p2(u1_opt*sin(x3)+d2_opt) + p3*u2_opt
+        # Note that -gamma*V is handled in the loss function
         
         ham = p1 * (u1 * torch.cos(x3) + d1) + \
               p2 * (u1 * torch.sin(x3) + d2) + \
@@ -122,16 +119,8 @@ class Dubins3D(StationaryDynamics):
         The safe region is defined by V(x) <= 0.
         Here, g(x) represents the obstacle (cylinder) and the state bounds.
         If g(x) <= 0, the state is safe (outside obstacle, inside bounds).
-        Wait, usually g(x) <= 0 is the target set (unsafe set) in reachability.
-        Let's double check the convention.
-        In standard reachability, we want to AVOID the target set.
-        So if we are in the target set (g(x) <= 0), we are unsafe.
-        However, the code below computes g3 = r^2 - dist^2.
-        If inside circle (dist < r), g3 > 0.
-        If outside circle (dist > r), g3 < 0.
-        So g(x) > 0 means unsafe (inside obstacle).
-        g(x) <= 0 means safe (outside obstacle).
         """
+        # input argument, state, is a torch tensor
         # g(x) = max(|x1|-L, |x2|-L, r^2 - (x1-Cx)^2 - (x2-Cy)^2)
         x1 = state[..., 0]
         x2 = state[..., 1]
@@ -141,11 +130,7 @@ class Dubins3D(StationaryDynamics):
         g2 = torch.abs(x2) - self.L
         
         # Obstacle constraint (inside circle is unsafe)
-        # Note: The note says "Inside circular obstacle... is unsafe".
         # g(x) <= 0 is safe.
-        # So if inside circle, g(x) > 0.
-        # The note defines g(x) = max(..., r^2 - dist^2).
-        # If dist < r (inside), r^2 - dist^2 > 0. Correct.
         dist_sq = (x1 - self.Cx)**2 + (x2 - self.Cy)**2
         g3 = self.r**2 - dist_sq
         
@@ -162,7 +147,7 @@ class Dubins3D(StationaryDynamics):
 
     def state_test_range(self):
         return [
-            [-self.L, self.L],
-            [-self.L, self.L],
+            [-self.L-0.1, self.L+0.1],
+            [-self.L-0.1, self.L+0.1],
             [-np.pi, np.pi]
         ]
