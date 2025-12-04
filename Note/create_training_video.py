@@ -46,19 +46,19 @@ if __name__ == "__main__":
     # Assuming script is run from deepreach root
     
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    image_folder = os.path.join(base_dir, 'runs', 'dubins3dDiscounted_trial_4', 'training', 'checkpoints')
+    image_folder = os.path.join(base_dir, 'runs', 'dubins3dDiscounted_trial_dec_3', 'training', 'checkpoints')
     
     # User requested 0.01s per frame -> 100 FPS
     fps = 10 
     
-    video_name = 'training_evolution_4.mp4'
+    video_name = 'training_evolution_dec_3.mp4'
     
     if os.path.exists(image_folder):
         create_video_from_images(image_folder, video_name, fps)
     else:
         print(f"Directory not found: {image_folder}")
         # Fallback to absolute path provided by user if relative fails
-        abs_path = r"C:\Users\Leixi\Desktop\DeepReach\deepreach\runs\dubins3dDiscounted_trial_4\training\checkpoints"
+        abs_path = r"/share/dlee/xzhan245/projects/DeepReach_Deployment/runs/dubins3dDiscounted_trial_dec_3\training\checkpoints"
         if os.path.exists(abs_path):
              create_video_from_images(abs_path, video_name, fps)
         else:

@@ -1,0 +1,41 @@
+/share/dlee/xzhan245/conda_envs/deepreach/lib/python3.10/site-packages/wandb/sdk/launch/builder/build.py:11: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+  import pkg_resources
+usage: run_experiment.py [-h] [-c CONFIG_FILEPATH] --mode {all,train,test}
+                         [--experiments_dir EXPERIMENTS_DIR] --experiment_name
+                         EXPERIMENT_NAME [--use_wandb]
+                         [--wandb_project WANDB_PROJECT]
+                         [--wandb_entity WANDB_ENTITY] [--seed SEED]
+                         [--experiment_class {DeepReach}] [--device DEVICE]
+                         [--numpoints NUMPOINTS] [--pretrain]
+                         [--pretrain_iters PRETRAIN_ITERS] [--tMin TMIN]
+                         [--tMax TMAX] [--counter_start COUNTER_START]
+                         [--counter_end COUNTER_END]
+                         [--num_src_samples NUM_SRC_SAMPLES]
+                         [--num_target_samples NUM_TARGET_SAMPLES]
+                         [--model {sine,tanh,sigmoid,relu}]
+                         [--model_mode {mlp,rbf,pinn}] [--num_hl NUM_HL]
+                         [--num_nl NUM_NL]
+                         [--deepreach_model {exact,diff,vanilla}]
+                         [--epochs_til_ckpt EPOCHS_TIL_CKPT]
+                         [--steps_til_summary STEPS_TIL_SUMMARY]
+                         [--batch_size BATCH_SIZE] [--lr LR]
+                         [--num_epochs NUM_EPOCHS] [--clip_grad CLIP_GRAD]
+                         [--use_lbfgs USE_LBFGS]
+                         [--adj_rel_grads ADJ_REL_GRADS]
+                         [--dirichlet_loss_divisor DIRICHLET_LOSS_DIVISOR]
+                         [--use_CSL] [--CSL_lr CSL_LR] [--CSL_dt CSL_DT]
+                         [--epochs_til_CSL EPOCHS_TIL_CSL]
+                         [--num_CSL_samples NUM_CSL_SAMPLES]
+                         [--CSL_loss_frac_cutoff CSL_LOSS_FRAC_CUTOFF]
+                         [--max_CSL_epochs MAX_CSL_EPOCHS]
+                         [--CSL_loss_weight CSL_LOSS_WEIGHT]
+                         [--CSL_batch_size CSL_BATCH_SIZE]
+                         [--val_x_resolution VAL_X_RESOLUTION]
+                         [--val_y_resolution VAL_Y_RESOLUTION]
+                         [--val_z_resolution VAL_Z_RESOLUTION]
+                         [--val_time_resolution VAL_TIME_RESOLUTION] --minWith
+                         {none,zero,target} --dynamics_class
+                         {Air3D,Dubins3D,Dubins3DDiscounted,Dubins4D,MultiVehicleCollision,NarrowPassage,ParameterizedVertDrone2D,Quadrotor,ReachAvoidRocketLanding,RocketLanding}
+                         --gamma GAMMA --angle_alpha_factor ANGLE_ALPHA_FACTOR
+                         --set_mode SET_MODE
+run_experiment.py: error: the following arguments are required: --gamma

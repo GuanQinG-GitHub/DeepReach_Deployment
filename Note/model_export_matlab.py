@@ -14,7 +14,7 @@ sys.path.append(deepreach_root)
 from dynamics import dynamics
 from utils import modules
 
-def export_to_matlab(experiment_dir, output_mat_file='deepreach_model_epoch_600000_3.mat'):
+def export_to_matlab(experiment_dir, output_mat_file='deepreach_model_dec_3.mat'):
     print(f"Loading experiment from: {experiment_dir}")
     
     # 1. Load original options
@@ -53,7 +53,7 @@ def export_to_matlab(experiment_dir, output_mat_file='deepreach_model_epoch_6000
     print(f"Initialized Model: SingleBVPNet (Hidden Layers: {opt.num_hl}, Neurons: {opt.num_nl})")
 
     # 4. Load Checkpoint
-    checkpoint_path = os.path.join(experiment_dir, 'training', 'checkpoints', 'model_epoch_600000.pth')
+    checkpoint_path = os.path.join(experiment_dir, 'training', 'checkpoints', 'model_current.pth')
     if not os.path.exists(checkpoint_path):
         print(f"Error: Could not find checkpoint at {checkpoint_path}")
         return
@@ -141,7 +141,7 @@ def export_to_matlab(experiment_dir, output_mat_file='deepreach_model_epoch_6000
 if __name__ == '__main__':
     # Default path based on user's workspace
     # Adjust this path if needed
-    default_exp_dir = os.path.join(deepreach_root, 'runs', 'dubins3dDiscounted_trial_4')
+    default_exp_dir = os.path.join(deepreach_root, 'runs', 'dubins3dDiscounted_trial_dec_3')
     
     if len(sys.argv) > 1:
         exp_dir = sys.argv[1]

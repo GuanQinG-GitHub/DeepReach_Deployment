@@ -1,0 +1,7 @@
+
+EnvironmentLocationNotFound: Not a conda environment: /share/dlee/xzhan245/conda_envs/DeepReach_Deployment
+
+Traceback (most recent call last):
+  File "/gpfs_common/share01/dlee/xzhan245/projects/DeepReach_Deployment/run_experiment.py", line 2, in <module>
+    import configargparse
+ModuleNotFoundError: No module named 'configargparse'

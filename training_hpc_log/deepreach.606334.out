@@ -1,0 +1,75 @@
+DeepReach job finished.
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@gpu16>
+Subject: Job 606334: <deepreach_ih_dec_3> in cluster <Hazel> Done
+
+Job <deepreach_ih_dec_3> was submitted from host <login02.hpc.ncsu.edu> by user <xzhan245> in cluster <Hazel> at Wed Dec  3 21:02:08 2025
+Job was executed on host(s) <gpu16>, in queue <gpu>, as user <xzhan245> in cluster <Hazel> at Wed Dec  3 21:02:10 2025
+</home/xzhan245> was used as the home directory.
+</share/dlee/xzhan245/projects/DeepReach_Deployment> was used as the working directory.
+Started at Wed Dec  3 21:02:10 2025
+Terminated at Wed Dec  3 21:03:51 2025
+Results reported at Wed Dec  3 21:03:51 2025
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+#!/bin/bash
+#BSUB -J deepreach_ih_dec_3            # Job name
+#BSUB -q gpu                       # GPU queue (you’ve been using this)
+#BSUB -gpu "num=1:gmodel=NVIDIAH100PCIe:mode=shared:mps=no"
+#BSUB -n 1                         # 1 CPU core is enough for this
+#BSUB -W 24:00                     # Wall time limit (hh:mm)
+#BSUB -R "rusage[mem=8GB]"         # Reserve 8 GB RAM
+#BSUB -o deepreach.%J.out          # STDOUT log
+#BSUB -e deepreach.%J.err          # STDERR log
+
+# Load your environment
+source ~/.bashrc
+conda activate /share/dlee/xzhan245/conda_envs/deepreach
+
+# Go to your DeepReach repo
+cd /gpfs_common/share01/dlee/xzhan245/projects/DeepReach_Deployment
+
+# Run the experiment
+python run_experiment.py \
+  --mode train \
+  --experiment_class DeepReach \
+  --dynamics_class Dubins3DDiscounted \
+  --experiment_name dubins3dDiscounted_trial_dec_3 \
+  --minWith target \
+  --angle_alpha_factor 1.2 \
+  --set_mode avoid \
+  --num_epochs 300000 \
+  --numpoints 200000 \
+  --use_wandb
+
+echo "DeepReach job finished."
+
+------------------------------------------------------------
+
+Successfully completed.
+
+Resource usage summary:
+
+    CPU time :                                   11.56 sec.
+    Max Memory :                                 -
+    Average Memory :                             -
+    Total Requested Memory :                     8.00 GB
+    Delta Memory :                               -
+    Max Swap :                                   -
+    Max Processes :                              4
+    Max Threads :                                5
+    Run time :                                   122 sec.
+    Turnaround time :                            103 sec.
+
+The output (if any) is above this job summary.
+
+
+
+PS:
+
+Read file <deepreach.606334.err> for stderr output of this job.
+
