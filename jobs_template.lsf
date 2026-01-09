@@ -1,0 +1,37 @@
+#!/bin/bash
+#BSUB -J deepreach_ih_dec_26            # Job name
+#BSUB -q gpu                       # GPU queue (you’ve been using this)
+#BSUB -gpu "num=1:gmodel=NVIDIAH100PCIe:mode=shared:mps=no"
+#BSUB -n 1                         # 1 CPU core is enough for this
+#BSUB -W 48:00                     # Wall time limit (hh:mm)
+#BSUB -R "rusage[mem=8GB]"         # Reserve 8 GB RAM
+#BSUB -o deepreach.%J.out          # STDOUT log
+#BSUB -e deepreach.%J.err          # STDERR log
+
+# Load your environment
+source ~/.bashrc
+conda activate /share/dlee/xzhan245/conda_envs/deepreach
+
+# Go to your DeepReach repo
+cd /gpfs_common/share01/dlee/xzhan245/projects/DeepReach_Deployment
+
+# Run the experiment
+python run_experiment.py \
+  --mode train \
+  --experiment_class DeepReach \
+  --dynamics_class Dubins3DDiscounted \
+  --experiment_name dubins3dDiscounted_trial_dec_26 \
+  --minWith target \
+  --angle_alpha_factor 1.2 \
+  --set_mode avoid \
+  --num_epochs 300000 \
+  --numpoints 200000 \
+  --gamma 0.7 \
+  --tMax 10 \
+  --deepreach_model vanilla \
+  --value_normto 1.0 \
+  --pretrain \
+  --pretrain_iters 5000
+  # --use_wandb
+
+echo "DeepReach job finished."

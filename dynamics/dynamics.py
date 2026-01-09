@@ -422,7 +422,7 @@ class Dubins3DDiscounted(Dynamics):
     Control: [u1, u2] (velocity, angular velocity)
     Disturbance: [d1, d2] (additive disturbance on x, y)
     """
-    def __init__(self, gamma:float, angle_alpha_factor:float, set_mode:str):
+    def __init__(self, gamma:float, angle_alpha_factor:float, set_mode:str, value_normto:float):
         # Store discount factor
         self.gamma = gamma
         
@@ -453,10 +453,10 @@ class Dubins3DDiscounted(Dynamics):
             disturbance_dim=2,          # [d1, d2]
             state_mean=[0, 0, 0],
             state_var=[self.L + 0.1, self.L + 0.1, angle_alpha_factor * math.pi], # question: how to set the state variance?
-            value_mean=0.25,
-            value_var=0.5,
-            value_normto=0.02,
-            deepreach_model="exact"     # Use exact DeepReach model
+            value_mean=0.0,
+            value_var=0.12,
+            value_normto=value_normto,
+            deepreach_model="vanilla"     # Use exact DeepReach model
         )
 
     def state_test_range(self):
