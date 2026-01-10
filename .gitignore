@@ -135,6 +135,6 @@ wandb
 runs
 
 # jobs
-jobs
-
+jobs and logs
+training_hpc_log/
 *.log
